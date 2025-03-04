@@ -1,4 +1,5 @@
 package servlet;
+import servlet.StudentDAO;
 
 import com.google.gson.Gson;
 import jakarta.servlet.ServletException;
@@ -6,103 +7,120 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import servlet.ErrorMessage;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @WebServlet("/students/*")
 public class StudentServlet extends HttpServlet {
+    private final Gson gson = new Gson();
 
-
-        private final List<Student> students = new ArrayList<>();
-        private final Gson gson = new Gson();
-
-        @Override
-        public void init() throws ServletException {
-            // Ajout d'exemples d'étudiants dans la liste pour tester
-            students.add(new Student(1, "Doe"));
-            students.add(new Student(2, "Smith"));
-        }
-//methode get pour lister tout les etudiant et un etudiant avec son id
-        @Override
-        protected void doGet(HttpServletRequest request, HttpServletResponse response)
-                throws ServletException, IOException {
-            response.setContentType("application/json");
-            response.setCharacterEncoding("UTF-8");
-            PrintWriter out = response.getWriter();
-
-            String pathInfo = request.getPathInfo(); // Récupère l'ID s'il est présent
-
-            if (pathInfo == null || pathInfo.equals("/")) {
-                // 📌 Retourner tous les étudiants (format JSON avec Gson)
-                String json = gson.toJson(students);
-                out.print(json);
-            } else {
-                // 📌 Retourner un étudiant par ID
-                String[] pathParts = pathInfo.split("/");
-                if (pathParts.length == 2) {
-                    try {
-                        int id = Integer.parseInt(pathParts[1]);
-                        Student student = students.stream()
-                                .filter(s -> s.getId() == id)
-                                .findFirst()
-                                .orElse(null);
-
-                        if (student != null) {
-                            out.print(gson.toJson(student));
-                        } else {
-                            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                            out.print(gson.toJson(new ErrorMessage("Étudiant non trouvé")));
-                        }
-                    } catch (NumberFormatException e) {
-                        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                        out.print(gson.toJson(new ErrorMessage("ID invalide")));
-                    }
-                }
-
-
-            }
-            out.flush();
-        }
-
-    //methode post
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String pathInfo = req.getPathInfo();
+        resp.setContentType("application/json");
 
-        try (BufferedReader reader = request.getReader()) {
-            Student newStudent = gson.fromJson(reader, Student.class);
+        if (pathInfo == null || pathInfo.equals("/")) {
+            // Retourne tous les étudiants
+            List<Student> students = StudentDAO.getAllStudents();
+            resp.getWriter().write(gson.toJson(students));
+        } else {
+            // Récupérer un étudiant par ID
+            try {
+                int id = Integer.parseInt(pathInfo.substring(1));
+                Student student = StudentDAO.getStudentById(id);
 
-            if (newStudent.getId() <= 0 || newStudent.getNom() == null || newStudent.getNom().isEmpty()) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                response.getWriter().write(gson.toJson(new ErrorMessage("Données invalides")));
-                return;
+                if (student != null) {
+                    resp.getWriter().write(gson.toJson(student));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    resp.getWriter().write("{\"error\":\"Étudiant non trouvé\"}");
+                }
+            } catch (NumberFormatException e) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                resp.getWriter().write("{\"error\":\"ID invalide\"}");
             }
-
-            // Vérifier si l'étudiant existe déjà
-            boolean exists = students.stream().anyMatch(s -> s.getId() == newStudent.getId());
-            if (exists) {
-                response.setStatus(HttpServletResponse.SC_CONFLICT);
-                response.getWriter().write(gson.toJson(new ErrorMessage("Un étudiant avec cet ID existe déjà")));
-                return;
-            }
-
-            students.add(newStudent);
-            response.setStatus(HttpServletResponse.SC_CREATED);
-            response.getWriter().write(gson.toJson(newStudent));
-        } catch (Exception e) {
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.getWriter().write(gson.toJson(new ErrorMessage("Erreur interne du serveur")));
         }
     }
 
-//methode  PUT
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        Student student = gson.fromJson(req.getReader(), Student.class);
 
- //methode Delete
+        if (student == null || Objects.isNull(student.getId())) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"Données invalides\"}");
+            return;
+        }
+
+        if (StudentDAO.getStudentById(student.getId()) != null) {
+            resp.setStatus(HttpServletResponse.SC_CONFLICT);
+            resp.getWriter().write("{\"error\":\"L'étudiant existe déjà\"}");
+            return;
+        }
+
+        StudentDAO.addStudent(student);
+        resp.setStatus(HttpServletResponse.SC_CREATED);
     }
+
+    @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String pathInfo = req.getPathInfo();
+
+        if (pathInfo == null || pathInfo.equals("/")) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID requis pour la mise à jour\"}");
+            return;
+        }
+
+        try {
+            int id = Integer.parseInt(pathInfo.substring(1));
+            Student existingStudent = StudentDAO.getStudentById(id);
+
+            if (existingStudent == null) {
+                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                resp.getWriter().write("{\"error\":\"Étudiant non trouvé\"}");
+                return;
+            }
+
+            Student updatedStudent = gson.fromJson(req.getReader(), Student.class);
+            updatedStudent.setId(id);
+            StudentDAO.updateStudent(updatedStudent);
+
+            resp.setStatus(HttpServletResponse.SC_OK);
+            resp.getWriter().write("{\"message\":\"Étudiant mis à jour avec succès\"}");
+        } catch (NumberFormatException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID invalide\"}");
+        }
+    }
+
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String pathInfo = req.getPathInfo();
+
+        if (pathInfo == null || pathInfo.equals("/")) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID requis pour la suppression\"}");
+            return;
+        }
+
+        try {
+            int id = Integer.parseInt(pathInfo.substring(1));
+
+            if (StudentDAO.getStudentById(id) == null) {
+                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                resp.getWriter().write("{\"error\":\"Étudiant non trouvé\"}");
+                return;
+            }
+
+            StudentDAO.deleteStudent(id);
+            resp.setStatus(HttpServletResponse.SC_OK);
+            resp.getWriter().write("{\"message\":\"Étudiant supprimé avec succès\"}");
+        } catch (NumberFormatException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID invalide\"}");
+        }
+    }
+}

@@ -62,6 +62,11 @@
           <artifactId>gson</artifactId>
           <version>2.10.1</version>
       </dependency>
+      <dependency>
+          <groupId>org.mongodb</groupId>
+          <artifactId>mongodb-driver-sync</artifactId>
+          <version>4.9.1</version>
+      </dependency>
   </dependencies>
 
   <build>
@@ -75,8 +80,9 @@
 
 
     </plugins>
-
+      <finalName>ROOT</finalName>
   </build>
+
     <repositories>
         <repository>
             <id>central</id>

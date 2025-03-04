@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Context>
+    <Resource name="jdbc/mongo"
+              auth="Container"
+              type="com.mongodb.client.MongoClient"
+              factory="com.mongodb.client.MongoClients"
+              uri="mongodb://admin:adminpass@mongodb:27017/studentdb"/>
+</Context>
